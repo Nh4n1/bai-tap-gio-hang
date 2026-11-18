@@ -1,0 +1,140 @@
+
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Quản lý danh mục{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold mb-1">Danh mục sách</h3>
+        <p class="text-secondary mb-0">Quản lý các danh mục sách</p>
+    </div>
+</div>
+
+<div class="row g-4">
+
+    <!-- DANH SÁCH DANH MỤC -->
+    <div class="col-lg-8">
+
+        <div class="card border-0 shadow-sm">
+
+            <div class="card-header bg-white py-3">
+                <strong>Danh sách danh mục ({{ categories|length }})</strong>
+            </div>
+
+            <div class="table-responsive">
+
+                <table class="table table-hover align-middle mb-0">
+
+                    <thead class="table-light">
+                        <tr>
+                            <th>Tên danh mục</th>
+                            <th>Số sách</th>
+                            <th class="text-end">Thao tác</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        {% for category, book_count in categories %}
+
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('admin_books', category_id=category.id) }}"
+                                   class="text-dark fw-semibold text-decoration-none">
+                                    {{ category.name }}
+                                </a>
+                            </td>
+
+                            <td>{{ book_count }}</td>
+
+                            <td class="text-end">
+
+                                <a href="{{ url_for('edit_category', category_id=category.id) }}"
+                                   class="btn btn-sm btn-outline-dark">
+                                    Sửa
+                                </a>
+
+                                <form action="{{ url_for('delete_category', category_id=category.id) }}"
+                                      method="POST"
+                                      class="d-inline"
+                                      onsubmit="return confirm('Bạn có chắc muốn xóa danh mục này?')">
+
+                                    <input type="hidden" name="csrf_token"
+                                           value="{{ csrf_token() }}">
+
+                                    <button type="submit"
+                                            class="btn btn-sm btn-outline-danger"
+                                            {% if book_count > 0 %}disabled{% endif %}>
+                                        Xóa
+                                    </button>
+
+                                </form>
+
+                            </td>
+                        </tr>
+
+                        {% else %}
+
+                        <tr>
+                            <td colspan="3" class="text-center text-secondary py-4">
+                                Chưa có danh mục nào
+                            </td>
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- FORM THÊM DANH MỤC -->
+    <div class="col-lg-4">
+
+        <div class="card border-0 shadow-sm">
+
+            <div class="card-header bg-white py-3">
+                <strong>Thêm danh mục</strong>
+            </div>
+
+            <div class="card-body">
+
+                <form method="POST">
+
+                    {{ form.hidden_tag() }}
+
+                    <div class="mb-3">
+                        {{ form.name.label(class="form-label") }}
+
+                        {{ form.name(class="form-control") }}
+
+                        {% for error in form.name.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="mb-3">
+                        {{ form.description.label(class="form-label") }}
+
+                        {{ form.description(class="form-control", rows="4") }}
+                    </div>
+
+                    {{ form.submit(class="btn btn-dark w-100") }}
+
+                </form>
+
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

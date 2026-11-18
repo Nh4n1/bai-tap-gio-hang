@@ -1,0 +1,226 @@
+
+{% extends "admin/base_admin.html" %}
+
+{% block title %}
+    {% if book %}Sửa sách{% else %}Thêm sách{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<div class="mb-4">
+
+    <h3 class="fw-bold">
+        {% if book %}
+            Sửa sách: {{ book.title }}
+        {% else %}
+            Thêm sách mới
+        {% endif %}
+    </h3>
+
+    <p class="text-secondary">
+        Nhập thông tin sách vào biểu mẫu bên dưới.
+    </p>
+
+</div>
+
+
+<div class="card border-0 shadow-sm">
+
+    <div class="card-body p-4">
+
+        <form method="POST"
+              enctype="multipart/form-data">
+
+            {{ form.hidden_tag() }}
+
+            <div class="row g-4">
+
+                <!-- LEFT -->
+                <div class="col-md-8">
+
+                    <div class="mb-3">
+
+                        {{ form.title.label(class="form-label fw-semibold") }}
+
+                        {{ form.title(class="form-control") }}
+
+                        {% for error in form.title.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <div class="mb-3">
+
+                        {{ form.author.label(class="form-label fw-semibold") }}
+
+                        {{ form.author(class="form-control") }}
+
+                        {% for error in form.author.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <div class="row g-3">
+
+                        <div class="col-md-6">
+
+                            {{ form.category_id.label(class="form-label fw-semibold") }}
+
+                            {{ form.category_id(class="form-select") }}
+
+                            {% for error in form.category_id.errors %}
+                                <div class="text-danger small">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-md-6">
+
+                            {{ form.publish_year.label(class="form-label fw-semibold") }}
+
+                            {{ form.publish_year(class="form-control", placeholder="2026") }}
+
+                            {% for error in form.publish_year.errors %}
+                                <div class="text-danger small">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="mb-3 mt-3">
+
+                        {{ form.publisher.label(class="form-label fw-semibold") }}
+
+                        {{ form.publisher(class="form-control") }}
+
+                    </div>
+
+
+                    <div class="row g-3">
+
+                        <div class="col-md-6">
+
+                            {{ form.price.label(class="form-label fw-semibold") }}
+
+                            {{ form.price(class="form-control", placeholder="100000") }}
+
+                            {% for error in form.price.errors %}
+                                <div class="text-danger small">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-md-6">
+
+                            {{ form.stock.label(class="form-label fw-semibold") }}
+
+                            {{ form.stock(class="form-control", placeholder="10") }}
+
+                            {% for error in form.stock.errors %}
+                                <div class="text-danger small">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="mb-3 mt-3">
+
+                        {{ form.description.label(class="form-label fw-semibold") }}
+
+                        {{ form.description(class="form-control", rows="5") }}
+
+                    </div>
+
+                </div>
+
+
+                <!-- RIGHT -->
+                <div class="col-md-4">
+
+                    <label class="form-label fw-semibold">
+                        Ảnh bìa
+                    </label>
+
+                    {% if book and book.image %}
+
+                        <div class="mb-3">
+
+                            <img src="{{ url_for('static', filename='uploads/' + book.image) }}"
+                                 class="img-fluid rounded border"
+                                 style="max-height: 220px; object-fit: contain;">
+
+                            <div class="text-secondary small mt-2">
+                                Ảnh hiện tại
+                            </div>
+
+                        </div>
+
+                    {% endif %}
+
+
+                    {{ form.image(class="form-control") }}
+
+                    <div class="text-secondary small mt-2">
+                        JPG, PNG, WEBP. Tối đa 2 MB.
+                    </div>
+
+                    {% for error in form.image.errors %}
+                        <div class="text-danger small">
+                            {{ error }}
+                        </div>
+                    {% endfor %}
+
+                    {% if book %}
+                        <p class="text-secondary small mt-2">
+                            Không chọn ảnh mới sẽ giữ ảnh hiện tại.
+                        </p>
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+
+            <hr class="my-4">
+
+
+            <div class="d-flex gap-2">
+
+                {{ form.submit(class="btn btn-dark px-4") }}
+
+                <a href="{{ url_for('admin_books') }}"
+                   class="btn btn-outline-secondary px-4">
+                    Hủy
+                </a>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+{% endblock %}
