@@ -7,12 +7,12 @@ from flask import Flask, current_app, flash, redirect, render_template, request,
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from PIL import Image
-from sqlalchemy import func, or_
+from sqlalchemy import extract, func, or_
 from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
 from config import Config
-from forms import BookForm, CategoryForm
+from forms import BookForm, CategoryForm, OrderStatusForm
 
 # config
 
@@ -22,6 +22,35 @@ app.config.from_object(Config)
 db = SQLAlchemy(app)
 csrf = CSRFProtect(app) #learn about this
 
+
+ORDER_STATUS_PENDING = "pending"
+ORDER_STATUS_SHIPPING = "shipping"
+ORDER_STATUS_COMPLETED = "completed"
+ORDER_STATUS_CANCELLED = "cancelled"
+
+
+ORDER_STATUS_LABELS = {
+    ORDER_STATUS_PENDING: "Chờ xác nhận",
+    ORDER_STATUS_SHIPPING: "Đang giao",
+    ORDER_STATUS_COMPLETED: "Hoàn tất",
+    ORDER_STATUS_CANCELLED: "Đã hủy"
+}
+
+ORDER_STATUS_TRANSITIONS = {
+    ORDER_STATUS_PENDING: [
+        ORDER_STATUS_SHIPPING,
+        ORDER_STATUS_CANCELLED
+    ],
+
+    ORDER_STATUS_SHIPPING: [
+        ORDER_STATUS_COMPLETED,
+        ORDER_STATUS_CANCELLED
+    ],
+
+    ORDER_STATUS_COMPLETED: [],
+
+    ORDER_STATUS_CANCELLED: []
+}
 
 def save_book_image(image_file):
 
@@ -639,6 +668,345 @@ def delete_book(book_id):
 
     return redirect(url_for("admin_books"))
 
+
+
+@app.route("/admin")
+def admin_dashboard():
+
+    # 1. Tổng số đầu sách
+    total_books = db.session.scalar(
+        db.select(func.count(Book.id))
+    )
+
+    # 2. Số đơn hàng đang chờ xác nhận
+    pending_orders = db.session.scalar(
+        db.select(func.count(Order.id))
+        .where(Order.status == ORDER_STATUS_PENDING)
+    )
+
+    # 3. Doanh thu tháng hiện tại
+    now = datetime.now()
+
+    monthly_revenue = db.session.scalar(
+        db.select(func.coalesce(func.sum(Order.total), 0))
+        .where(
+            Order.status == ORDER_STATUS_COMPLETED,
+            extract("year", Order.created_at) == now.year,
+            extract("month", Order.created_at) == now.month
+        )
+    )
+
+    # 4. Số sách có tồn kho <= 5
+    low_stock_count = db.session.scalar(
+        db.select(func.count(Book.id))
+        .where(Book.stock <= 5)
+    )
+
+    # 5. Lấy 5 đơn hàng mới nhất
+    recent_orders = db.session.scalars(
+        db.select(Order)
+        .order_by(Order.created_at.desc())
+        .limit(5)
+    ).all()
+
+    # 6. Lấy danh sách sách sắp hết hàng
+    low_stock_books = db.session.scalars(
+        db.select(Book)
+        .where(Book.stock <= 5)
+        .order_by(Book.stock.asc())
+        .limit(10)
+    ).all()
+
+    return render_template(
+        "admin/dashboard.html",
+        now_month=now.month,
+        total_books=total_books,
+        pending_orders=pending_orders,
+        monthly_revenue=monthly_revenue,
+        low_stock_count=low_stock_count,
+
+        recent_orders=recent_orders,
+        low_stock_books=low_stock_books,
+
+        status_labels=ORDER_STATUS_LABELS
+    )
+
+
+@app.route("/admin/orders")
+def admin_orders():
+
+    # 1. Nhận tham số từ URL
+    keyword = request.args.get("q", "").strip()
+
+    status = request.args.get("status", "")
+
+    page = request.args.get(
+        "page",
+        1,
+        type=int
+    )
+
+    # 2. Truy vấn số đơn theo từng trạng thái
+    status_counts = db.session.execute(
+        db.select(
+            Order.status,
+            func.count(Order.id)
+        )
+        .group_by(Order.status)
+    ).all()
+
+    # Chuyển kết quả thành dictionary
+    counts = {
+        ORDER_STATUS_PENDING: 0,
+        ORDER_STATUS_SHIPPING: 0,
+        ORDER_STATUS_COMPLETED: 0,
+        ORDER_STATUS_CANCELLED: 0
+    }
+
+    for order_status, count in status_counts:
+        counts[order_status] = count
+
+    # Tổng số đơn
+    total_orders = sum(counts.values())
+
+    # 3. Truy vấn ban đầu
+    query = db.select(Order)
+
+    # 4. Lọc theo trạng thái
+    if status in ORDER_STATUS_LABELS:
+
+        query = query.where(
+            Order.status == status
+        )
+
+    # 5. Tìm kiếm
+    if keyword:
+
+        conditions = [
+            Order.customer_name.ilike(f"%{keyword}%"),
+            Order.phone.ilike(f"%{keyword}%")
+        ]
+
+        # Nếu từ khóa là số, tìm theo mã đơn
+        if keyword.isdigit():
+
+            conditions.append(
+                Order.id == int(keyword)
+            )
+
+        query = query.where(
+            or_(*conditions)
+        )
+
+    # 6. Sắp xếp đơn mới nhất trước
+    query = query.order_by(
+        Order.created_at.desc()
+    )
+
+    # 7. Tính tổng số đơn và tổng giá trị
+    summary_query = db.select(
+        func.count(Order.id),
+        func.coalesce(func.sum(Order.total), 0)
+    )
+
+    # Dùng cùng điều kiện lọc với truy vấn danh sách
+    if status in ORDER_STATUS_LABELS:
+
+        summary_query = summary_query.where(
+            Order.status == status
+        )
+
+    if keyword:
+
+        conditions = [
+            Order.customer_name.ilike(f"%{keyword}%"),
+            Order.phone.ilike(f"%{keyword}%")
+        ]
+
+        if keyword.isdigit():
+            conditions.append(
+                Order.id == int(keyword)
+            )
+
+        summary_query = summary_query.where(
+            or_(*conditions)
+        )
+
+    summary = db.session.execute(
+        summary_query
+    ).one()
+
+    filtered_count = summary[0]
+    filtered_total = summary[1]
+
+    # 8. Phân trang
+    pagination = db.paginate(
+        query,
+        page=page,
+        per_page=10,
+        error_out=False
+    )
+
+    return render_template(
+        "admin/orders/index.html",
+
+        orders=pagination.items,
+        pagination=pagination,
+
+        keyword=keyword,
+        current_status=status,
+
+        counts=counts,
+        total_orders=total_orders,
+
+        filtered_count=filtered_count,
+        filtered_total=filtered_total,
+
+        status_labels=ORDER_STATUS_LABELS
+    )
+
+
+
+@app.route(
+    "/admin/orders/<int:order_id>",
+    methods=["GET", "POST"]
+)
+def admin_order_detail(order_id):
+
+    # 1. Tìm đơn hàng
+    order = db.get_or_404(Order, order_id)
+
+    # 2. Xác định trạng thái có thể chuyển đến
+    allowed_statuses = ORDER_STATUS_TRANSITIONS.get(
+        order.status,
+        []
+    )
+
+    # 3. Khởi tạo form
+    form = OrderStatusForm()
+
+    # Chỉ hiển thị các trạng thái hợp lệ
+    form.status.choices = [
+        (status, ORDER_STATUS_LABELS[status])
+        for status in allowed_statuses
+    ]
+
+    # 4. Xử lý khi quản trị viên gửi form
+    if form.validate_on_submit():
+
+        new_status = form.status.data
+
+        # Kiểm tra trạng thái mới có hợp lệ không
+        if new_status not in ORDER_STATUS_TRANSITIONS.get(
+            order.status, []
+        ):
+
+            flash(
+                "Không thể chuyển sang trạng thái này!",
+                "danger"
+            )
+
+            return redirect(
+                url_for(
+                    "admin_order_detail",
+                    order_id=order.id
+                )
+            )
+
+        try:
+
+            # Nếu hủy đơn thì hoàn lại tồn kho
+            if new_status == ORDER_STATUS_CANCELLED:
+
+                for item in order.items:
+
+                    book = db.session.get(
+                        Book,
+                        item.book_id
+                    )
+
+                    if book is not None:
+
+                        book.stock += item.quantity
+
+            # Cập nhật trạng thái đơn hàng
+            order.status = new_status
+
+            # Ghi nhận lịch sử trạng thái
+            history = OrderStatusHistory(
+                order_id=order.id,
+                status=new_status,
+                created_at=datetime.now()
+            )
+
+            db.session.add(history)
+
+            # Lưu tất cả thay đổi
+            db.session.commit()
+
+            flash(
+                "Cập nhật trạng thái đơn hàng thành công!",
+                "success"
+            )
+
+        except Exception:
+
+            db.session.rollback()
+
+            flash(
+                "Có lỗi xảy ra khi cập nhật đơn hàng!",
+                "danger"
+            )
+
+        # PRG: Post -> Redirect -> Get
+        return redirect(
+            url_for(
+                "admin_order_detail",
+                order_id=order.id
+            )
+        )
+
+    # 5. Lấy lịch sử thay đổi trạng thái
+    histories = db.session.scalars(
+        db.select(OrderStatusHistory)
+        .where(
+            OrderStatusHistory.order_id == order.id
+        )
+        .order_by(
+            OrderStatusHistory.created_at.asc()
+        )
+    ).all()
+
+    # 6. Tính lại tạm tính từ các dòng đơn hàng
+    subtotal = sum(
+        item.quantity * item.unit_price
+        for item in order.items
+    )
+
+    return render_template(
+        "admin/orders/detail.html",
+
+        order=order,
+        form=form,
+
+        histories=histories,
+
+        subtotal=subtotal,
+
+        status_labels=ORDER_STATUS_LABELS
+    )
+
+@app.context_processor
+def inject_admin_data():
+
+    pending_count = db.session.scalar(
+        db.select(func.count(Order.id))
+        .where(Order.status == ORDER_STATUS_PENDING)
+    )
+
+    return {
+        "pending_orders_count": pending_count
+    }
 ###
 # run
 ###

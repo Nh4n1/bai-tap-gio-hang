@@ -113,3 +113,18 @@ class BookForm(FlaskForm):
     )
 
     submit = SubmitField("Lưu sách")
+    
+
+
+
+class OrderStatusForm(FlaskForm):
+
+    status = SelectField(
+        "Trạng thái đơn hàng",
+        choices=[],
+        validators=[
+            DataRequired(message="Vui lòng chọn trạng thái")
+        ]
+    )
+
+    submit = SubmitField("Cập nhật trạng thái")

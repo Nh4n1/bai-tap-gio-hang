@@ -1,0 +1,362 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Chi tiết đơn hàng #{{ order.id }}{% endblock %}
+
+{% block content %}
+
+<!-- HEADER -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+
+    <div>
+
+        <a href="{{ url_for('admin_orders') }}" class="text-secondary text-decoration-none small">
+            Đơn hàng
+        </a>
+
+        <span class="text-secondary"> / #{{ order.id }}</span>
+
+        <h3 class="fw-bold mt-2 mb-1">
+            Đơn hàng #{{ order.id }}
+        </h3>
+
+        <p class="text-secondary mb-0">
+            {{ order.created_at.strftime('%d/%m/%Y %H:%M') }}
+        </p>
+
+    </div>
+
+    <a href="{{ url_for('admin_orders') }}" class="btn btn-outline-secondary">
+        ← Quay lại
+    </a>
+
+</div>
+
+
+<div class="row g-4">
+
+    <!-- LEFT: ORDER INFORMATION -->
+    <div class="col-lg-8">
+
+        <!-- CUSTOMER -->
+        <div class="card border-0 shadow-sm mb-4">
+
+            <div class="card-header bg-white py-3">
+                <strong>Thông tin khách hàng</strong>
+            </div>
+
+            <div class="card-body">
+
+                <h6 class="fw-bold">
+                    {{ order.customer_name }}
+                </h6>
+
+                <p class="text-secondary mb-2">
+                    {{ order.phone }}
+                </p>
+
+                {% if order.email %}
+                <p class="text-secondary mb-2">
+                    {{ order.email }}
+                </p>
+                {% endif %}
+
+                <hr>
+
+                <div class="mb-3">
+
+                    <div class="text-secondary small mb-1">
+                        Địa chỉ giao hàng
+                    </div>
+
+                    {{ order.address }}
+
+                </div>
+
+                <div class="mb-3">
+
+                    <div class="text-secondary small mb-1">
+                        Phương thức thanh toán
+                    </div>
+
+                    {{ order.payment_method }}
+
+                </div>
+
+                {% if order.note %}
+
+                <div>
+
+                    <div class="text-secondary small mb-1">
+                        Ghi chú
+                    </div>
+
+                    {{ order.note }}
+
+                </div>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+
+        <!-- ORDER ITEMS -->
+        <div class="card border-0 shadow-sm">
+
+            <div class="card-header bg-white py-3">
+                <strong>Chi tiết sản phẩm</strong>
+            </div>
+
+            <div class="table-responsive">
+
+                <table class="table align-middle mb-0">
+
+                    <thead class="table-light">
+
+                        <tr>
+                            <th>Sách</th>
+                            <th>Đơn giá</th>
+                            <th>Số lượng</th>
+                            <th class="text-end">Thành tiền</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {% for item in order.items %}
+
+                        <tr>
+
+                            <td>
+                                {% if item.book %}
+                                {{ item.book.title }}
+                                {% else %}
+                                Sách không còn trong hệ thống
+                                {% endif %}
+                            </td>
+
+                            <td class="text-nowrap">
+                                {{ "{:,.0f}".format(item.unit_price) }} đ
+                            </td>
+
+                            <td>
+                                {{ item.quantity }}
+                            </td>
+
+                            <td class="text-end text-nowrap">
+                                {{ "{:,.0f}".format(
+                                item.unit_price * item.quantity
+                                ) }} đ
+                            </td>
+
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+
+            <!-- ORDER TOTAL -->
+            <div class="card-body">
+
+                <div class="d-flex justify-content-between mb-2">
+
+                    <span class="text-secondary">
+                        Tạm tính
+                    </span>
+
+                    <span>
+                        {{ "{:,.0f}".format(subtotal) }} đ
+                    </span>
+
+                </div>
+
+
+                <div class="d-flex justify-content-between mb-2">
+
+                    <span class="text-secondary">
+                        Phí giao hàng
+                    </span>
+
+                    <span>
+                        {% if order.shipping_fee == 0 %}
+                        Miễn phí
+                        {% else %}
+                        {{ "{:,.0f}".format(order.shipping_fee) }} đ
+                        {% endif %}
+                    </span>
+
+                </div>
+
+
+                <hr>
+
+
+                <div class="d-flex justify-content-between">
+
+                    <strong>Tổng thanh toán</strong>
+
+                    <h5 class="fw-bold mb-0">
+                        {{ "{:,.0f}".format(order.total) }} đ
+                    </h5>
+
+                </div>
+
+                <small class="text-secondary">
+                    Đơn giá sản phẩm được lấy từ
+                    OrderItem.unit_price tại thời điểm đặt hàng.
+                </small>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- RIGHT: STATUS -->
+    <div class="col-lg-4">
+
+        <!-- CURRENT STATUS -->
+        <div class="card border-0 shadow-sm mb-4">
+
+            <div class="card-header bg-white py-3">
+                <strong>Trạng thái đơn hàng</strong>
+            </div>
+
+            <div class="card-body">
+
+                {% if order.status == 'pending' %}
+
+                <span class="badge text-bg-warning fs-6">
+                    Chờ xác nhận
+                </span>
+
+                {% elif order.status == 'shipping' %}
+
+                <span class="badge text-bg-primary fs-6">
+                    Đang giao
+                </span>
+
+                {% elif order.status == 'completed' %}
+
+                <span class="badge text-bg-success fs-6">
+                    Hoàn tất
+                </span>
+
+                {% else %}
+
+                <span class="badge text-bg-secondary fs-6">
+                    Đã hủy
+                </span>
+
+                {% endif %}
+
+
+                {% if form.status.choices %}
+
+                <hr>
+
+                <form method="POST">
+
+                    {{ form.hidden_tag() }}
+
+                    <div class="mb-3">
+
+                        {{ form.status.label(class="form-label") }}
+
+                        {{ form.status(class="form-select") }}
+
+                        {% for error in form.status.errors %}
+
+                        <div class="text-danger small mt-1">
+                            {{ error }}
+                        </div>
+
+                        {% endfor %}
+
+                    </div>
+
+                    {{ form.submit(class="btn btn-dark w-100") }}
+
+                </form>
+
+                {% else %}
+
+                <hr>
+
+                <p class="text-secondary small mb-0">
+                    Đơn hàng đã kết thúc.
+                    Không thể cập nhật trạng thái.
+                </p>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+
+        <!-- STATUS HISTORY -->
+        <div class="card border-0 shadow-sm">
+
+            <div class="card-header bg-white py-3">
+                <strong>Lịch sử đơn hàng</strong>
+            </div>
+
+            <div class="card-body">
+
+                {% if histories %}
+
+                <div class="list-group list-group-flush">
+
+                    {% for history in histories %}
+
+                    <div class="list-group-item px-0">
+
+                        <div class="fw-semibold">
+
+                            {{ status_labels.get(
+                            history.status,
+                            history.status
+                            ) }}
+
+                        </div>
+
+                        <small class="text-secondary">
+
+                            {{ history.created_at.strftime(
+                            '%d/%m/%Y %H:%M'
+                            ) }}
+
+                        </small>
+
+                    </div>
+
+                    {% endfor %}
+
+                </div>
+
+                {% else %}
+
+                <p class="text-secondary small mb-0">
+                    Chưa có lịch sử thay đổi trạng thái.
+                </p>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

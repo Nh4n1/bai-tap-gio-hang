@@ -1,0 +1,216 @@
+{% extends "admin/base_admin.html" %} {% block title %}Quản lý đơn hàng{%
+endblock %} {% block content %}
+
+<div class="mb-4">
+  <h3 class="fw-bold mb-1">Đơn hàng</h3>
+
+  <p class="text-secondary mb-0">Quản lý và theo dõi đơn hàng</p>
+</div>
+
+<!-- STATUS TABS -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <ul class="nav nav-tabs flex-wrap">
+      <li class="nav-item">
+        <a class="nav-link {% if not current_status %}active{% endif %}"
+          href="{{ url_for('admin_orders', q=keyword) }}">
+          Tất cả
+          <span class="badge text-bg-secondary"> {{ total_orders }} </span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if current_status == 'pending' %}active{% endif %}" href="{{ url_for('admin_orders',
+                       status='pending', q=keyword) }}">
+          Chờ xác nhận
+          <span class="badge text-bg-warning"> {{ counts['pending'] }} </span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if current_status == 'shipping' %}active{% endif %}" href="{{ url_for('admin_orders',
+                       status='shipping', q=keyword) }}">
+          Đang giao
+          <span class="badge text-bg-primary"> {{ counts['shipping'] }} </span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if current_status == 'completed' %}active{% endif %}" href="{{ url_for('admin_orders',
+                       status='completed', q=keyword) }}">
+          Hoàn tất
+          <span class="badge text-bg-success"> {{ counts['completed'] }} </span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if current_status == 'cancelled' %}active{% endif %}" href="{{ url_for('admin_orders',
+                       status='cancelled', q=keyword) }}">
+          Đã hủy
+          <span class="badge text-bg-secondary">
+            {{ counts['cancelled'] }}
+          </span>
+        </a>
+      </li>
+    </ul>
+
+    <!-- SEARCH -->
+    <form method="GET" action="{{ url_for('admin_orders') }}" class="mt-3">
+      <input type="hidden" name="status" value="{{ current_status }}" />
+
+      <div class="input-group">
+        <input type="text" name="q" class="form-control" placeholder="Mã đơn, tên khách hàng, số điện thoại..."
+          value="{{ keyword }}" />
+
+        <button class="btn btn-dark" type="submit">Tìm kiếm</button>
+
+        <a href="{{ url_for('admin_orders',
+                    status=current_status) }}" class="btn btn-outline-secondary">
+          Xóa lọc
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ORDER TABLE -->
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Mã đơn</th>
+          <th>Ngày đặt</th>
+          <th>Khách hàng</th>
+          <th>Điện thoại</th>
+          <th>Tổng tiền</th>
+          <th>Trạng thái</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for order in orders %}
+
+        <tr style="cursor: pointer" data-href="{{ url_for('admin_order_detail', order_id=order.id) }}"
+          onclick="window.location = this.dataset.href">
+          <td class="fw-semibold">#{{ order.id }}</td>
+
+          <td class="text-nowrap">
+            {{ order.created_at.strftime('%d/%m/%Y') }}
+          </td>
+
+          <td>{{ order.customer_name }}</td>
+
+          <td>{{ order.phone }}</td>
+
+          <td class="text-nowrap">{{ "{:,.0f}".format(order.total) }} đ</td>
+
+          <td>
+            {% if order.status == 'pending' %}
+
+            <span class="badge text-bg-warning"> Chờ xác nhận </span>
+
+            {% elif order.status == 'shipping' %}
+
+            <span class="badge text-bg-primary"> Đang giao </span>
+
+            {% elif order.status == 'completed' %}
+
+            <span class="badge text-bg-success"> Hoàn tất </span>
+
+            {% else %}
+
+            <span class="badge text-bg-secondary"> Đã hủy </span>
+
+            {% endif %}
+          </td>
+        </tr>
+
+        {% else %}
+
+        <tr>
+          <td colspan="6" class="text-center text-secondary py-5">
+            Không tìm thấy đơn hàng.
+          </td>
+        </tr>
+
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="card-body border-top">
+    <div class="d-flex justify-content-between">
+      <span class="text-secondary">
+        {{ filtered_count }} đơn · Tổng giá trị
+      </span>
+
+      <strong> {{ "{:,.0f}".format(filtered_total) }} đ </strong>
+    </div>
+  </div>
+
+  <!-- PAGINATION -->
+  <div class="card-footer bg-white">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <small class="text-secondary">
+        Trang {{ pagination.page }} / {{ pagination.pages if pagination.pages >
+        0 else 1 }}
+      </small>
+
+      <nav>
+        <ul class="pagination pagination-sm mb-0">
+          {% if pagination.has_prev %}
+
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for(
+                               'admin_orders',
+                               page=pagination.prev_num,
+                               status=current_status,
+                               q=keyword
+                           ) }}">
+              Trước
+            </a>
+          </li>
+
+          {% endif %} {% for page_num in pagination.iter_pages() %} {% if
+          page_num %}
+
+          <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+            <a class="page-link" href="{{ url_for(
+                                       'admin_orders',
+                                       page=page_num,
+                                       status=current_status,
+                                       q=keyword
+                                   ) }}">
+              {{ page_num }}
+            </a>
+          </li>
+
+          {% else %}
+
+          <li class="page-item disabled">
+            <span class="page-link">...</span>
+          </li>
+
+          {% endif %} {% endfor %} {% if pagination.has_next %}
+
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for(
+                               'admin_orders',
+                               page=pagination.next_num,
+                               status=current_status,
+                               q=keyword
+                           ) }}">
+              Sau
+            </a>
+          </li>
+
+          {% endif %}
+        </ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

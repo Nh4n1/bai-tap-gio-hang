@@ -1,0 +1,269 @@
+
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Tổng quan quản trị{% endblock %}
+
+{% block content %}
+
+<div class="mb-4">
+    <h3 class="fw-bold mb-1">Tổng quan</h3>
+    <p class="text-secondary mb-0">
+        Tình hình hoạt động của Nhà sách Sông Hương
+    </p>
+</div>
+
+
+<!-- STATISTICS -->
+<div class="row g-3 mb-4">
+
+    <div class="col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-secondary small">
+                    Đầu sách
+                </div>
+
+                <h3 class="fw-bold mt-2 mb-0">
+                    {{ total_books }}
+                </h3>
+
+                <a href="{{ url_for('admin_books') }}"
+                   class="small text-dark">
+                    Quản lý sách →
+                </a>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-secondary small">
+                    Đơn chờ xác nhận
+                </div>
+
+                <h3 class="fw-bold mt-2 mb-0">
+                    {{ pending_orders }}
+                </h3>
+
+                <a href="{{ url_for('admin_orders', status='pending') }}"
+                   class="small text-dark">
+                    Xem đơn hàng →
+                </a>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-secondary small">
+                    Doanh thu tháng {{ now_month if now_month else "" }}
+                </div>
+
+                <h3 class="fw-bold mt-2 mb-0">
+                    {{ "{:,.0f}".format(monthly_revenue) }} đ
+                </h3>
+
+                <small class="text-secondary">
+                    Chỉ tính đơn hoàn tất
+                </small>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="col-md-6 col-xl-3">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body">
+                <div class="text-secondary small">
+                    Sắp hết hàng
+                </div>
+
+                <h3 class="fw-bold mt-2 mb-0">
+                    {{ low_stock_count }}
+                </h3>
+
+                <a href="{{ url_for('admin_books', stock='low') }}"
+                   class="small text-dark">
+                    Kiểm tra tồn kho →
+                </a>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+
+<div class="row g-4">
+
+    <!-- RECENT ORDERS -->
+    <div class="col-lg-8">
+
+        <div class="card border-0 shadow-sm h-100">
+
+            <div class="card-header bg-white py-3">
+                <strong>Đơn hàng mới nhất</strong>
+            </div>
+
+            <div class="table-responsive">
+
+                <table class="table table-hover align-middle mb-0">
+
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã đơn</th>
+                            <th>Khách hàng</th>
+                            <th>Tổng tiền</th>
+                            <th>Trạng thái</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        {% for order in recent_orders %}
+
+                        <tr>
+
+                            <td>
+                                <a href="{{ url_for(
+                                    'admin_order_detail',
+                                    order_id=order.id
+                                ) }}"
+                                   class="fw-semibold text-dark">
+                                    #{{ order.id }}
+                                </a>
+                            </td>
+
+                            <td>{{ order.customer_name }}</td>
+
+                            <td class="text-nowrap">
+                                {{ "{:,.0f}".format(order.total) }} đ
+                            </td>
+
+                            <td>
+                                {% if order.status == 'pending' %}
+                                    <span class="badge text-bg-warning">
+                                        {{ status_labels[order.status] }}
+                                    </span>
+
+                                {% elif order.status == 'shipping' %}
+                                    <span class="badge text-bg-primary">
+                                        {{ status_labels[order.status] }}
+                                    </span>
+
+                                {% elif order.status == 'completed' %}
+                                    <span class="badge text-bg-success">
+                                        {{ status_labels[order.status] }}
+                                    </span>
+
+                                {% else %}
+                                    <span class="badge text-bg-secondary">
+                                        {{ status_labels[order.status] }}
+                                    </span>
+                                {% endif %}
+                            </td>
+
+                        </tr>
+
+                        {% else %}
+
+                        <tr>
+                            <td colspan="4"
+                                class="text-center text-secondary py-4">
+                                Chưa có đơn hàng
+                            </td>
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            <div class="card-footer bg-white text-end">
+                <a href="{{ url_for('admin_orders') }}"
+                   class="text-dark small">
+                    Xem tất cả đơn hàng →
+                </a>
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- LOW STOCK -->
+    <div class="col-lg-4">
+
+        <div class="card border-0 shadow-sm h-100">
+
+            <div class="card-header bg-white py-3">
+                <strong>Sách sắp hết hàng (≤ 5)</strong>
+            </div>
+
+            <div class="card-body">
+
+                {% for book in low_stock_books %}
+
+                <div class="d-flex justify-content-between
+                            align-items-center mb-3">
+
+                    <div class="me-2">
+
+                        <a href="{{ url_for(
+                            'edit_book',
+                            book_id=book.id
+                        ) }}"
+                           class="text-dark fw-semibold
+                                  text-decoration-none">
+
+                            {{ book.title }}
+
+                        </a>
+
+                        <div class="small text-secondary">
+                            {{ book.author }}
+                        </div>
+
+                    </div>
+
+                    {% if book.stock == 0 %}
+
+                        <span class="badge text-bg-danger">
+                            Hết hàng
+                        </span>
+
+                    {% else %}
+
+                        <span class="badge text-bg-warning">
+                            {{ book.stock }}
+                        </span>
+
+                    {% endif %}
+
+                </div>
+
+                <hr>
+
+                {% else %}
+
+                <p class="text-secondary mb-0">
+                    Không có sách sắp hết hàng.
+                </p>
+
+                {% endfor %}
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
