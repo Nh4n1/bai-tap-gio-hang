@@ -3,7 +3,7 @@ import os
 import uuid
 from datetime import datetime
 
-from flask import Flask, current_app, flash, redirect, render_template, request, url_for
+from flask import Flask, current_app, flash, redirect, render_template, request, session, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from PIL import Image
@@ -670,6 +670,11 @@ def delete_book(book_id):
 
 
 
+@app.route("/")
+def index():
+    return redirect(url_for("admin_dashboard"))
+
+
 @app.route("/admin")
 def admin_dashboard():
 
@@ -1007,6 +1012,365 @@ def inject_admin_data():
     return {
         "pending_orders_count": pending_count
     }
+    
+    
+
+@app.route("/books")
+def store_books():
+
+    # 1. Nhận từ khóa tìm kiếm
+    keyword = request.args.get("q", "").strip()
+
+    # 2. Nhận danh mục được chọn
+    category_id = request.args.get(
+        "category_id",
+        type=int
+    )
+
+    # 3. Lấy danh sách danh mục
+    categories = db.session.scalars(
+        db.select(Category).order_by(Category.name)
+    ).all()
+
+    # 4. Tạo truy vấn sách
+    query = db.select(Book)
+
+    # 5. Tìm theo tên sách hoặc tác giả
+    if keyword:
+
+        query = query.where(
+            or_(
+                Book.title.ilike(f"%{keyword}%"),
+                Book.author.ilike(f"%{keyword}%")
+            )
+        )
+
+    # 6. Lọc theo danh mục
+    if category_id is not None:
+
+        query = query.where(
+            Book.category_id == category_id
+        )
+
+    # 7. Sắp xếp sách mới nhất trước
+    query = query.order_by(Book.id.desc())
+
+    # 8. Thực thi truy vấn
+    books = db.session.scalars(query).all()
+
+    return render_template(
+        "store/books/index.html",
+
+        books=books,
+        categories=categories,
+
+        keyword=keyword,
+        category_id=category_id
+    )
+    
+
+@app.route("/books/<int:book_id>")
+def store_book_detail(book_id):
+
+    # Tìm sách theo ID
+    book = db.get_or_404(Book, book_id)
+
+    # Lấy số lượng sách đã có trong giỏ
+    cart = session.get("cart", {})
+
+    cart_quantity = int(
+        cart.get(str(book.id), 0)
+    )
+
+    # Số lượng còn có thể thêm vào giỏ
+    available_quantity = max(
+        book.stock - cart_quantity,
+        0
+    )
+
+    return render_template(
+        "store/books/detail.html",
+
+        book=book,
+
+        cart_quantity=cart_quantity,
+        available_quantity=available_quantity
+    )
+    
+@app.context_processor
+def inject_store_data():
+
+    # Lấy giỏ hàng từ Session
+    cart = session.get("cart", {})
+
+    # Tính tổng số lượng sách
+    cart_count = sum(
+        int(quantity)
+        for quantity in cart.values()
+    )
+
+    return {
+        "cart_count": cart_count
+    }
+    
+
+
+@app.route("/cart")
+def cart_index():
+
+    # 1. Lấy giỏ hàng
+    cart = session.get("cart", {})
+
+    cart_items = []
+
+    subtotal = 0
+
+    # 2. Chuyển các ID từ Session thành số nguyên
+    book_ids = [
+        int(book_id)
+        for book_id in cart.keys()
+    ]
+
+    # 3. Truy vấn tất cả sách trong giỏ
+    books = db.session.scalars(
+        db.select(Book).where(
+            Book.id.in_(book_ids)
+        )
+    ).all() if book_ids else []
+
+    # 4. Tạo dictionary để tìm sách theo ID
+    book_map = {
+        book.id: book
+        for book in books
+    }
+
+    # 5. Duyệt từng sản phẩm trong Session
+    for book_id, quantity in cart.items():
+
+        book = book_map.get(int(book_id))
+
+        # Bỏ qua sách không còn tồn tại
+        if book is None:
+            continue
+
+        quantity = int(quantity)
+
+        # Giá lấy trực tiếp từ database
+        line_total = book.price * quantity
+
+        subtotal += line_total
+
+        cart_items.append({
+            "book": book,
+            "quantity": quantity,
+            "line_total": line_total
+        })
+
+    return render_template(
+        "store/cart/index.html",
+
+        cart_items=cart_items,
+
+        subtotal=subtotal
+    )
+
+
+@app.route(
+    "/cart/add/<int:book_id>",
+    methods=["POST"]
+)
+def cart_add(book_id):
+
+    # 1. Tìm sách
+    book = db.get_or_404(Book, book_id)
+
+    # 2. Nhận số lượng từ form
+    quantity = request.form.get(
+        "quantity",
+        default=1,
+        type=int
+    )
+
+    # 3. Kiểm tra số lượng hợp lệ
+    if quantity is None or quantity < 1:
+
+        flash(
+            "Số lượng phải lớn hơn 0!",
+            "danger"
+        )
+
+        return redirect(
+            url_for(
+                "store_book_detail",
+                book_id=book.id
+            )
+        )
+
+    # 4. Lấy giỏ hàng
+    cart = session.get("cart", {})
+
+    # Chuyển ID thành chuỗi vì key trong Session là string
+    book_key = str(book.id)
+
+    # 5. Lấy số lượng sách đã có
+    current_quantity = int(
+        cart.get(book_key, 0)
+    )
+
+    # 6. Kiểm tra tồn kho còn có thể thêm
+    available_quantity = (
+        book.stock - current_quantity
+    )
+
+    if quantity > available_quantity:
+
+        flash(
+            f"Chỉ có thể thêm tối đa "
+            f"{max(available_quantity, 0)} cuốn "
+            f"{book.title} vào giỏ!",
+            "danger"
+        )
+
+    else:
+
+        # 7. Cộng dồn số lượng
+        cart[book_key] = (
+            current_quantity + quantity
+        )
+
+        # 8. Cập nhật Session
+        session["cart"] = cart
+
+        flash(
+            f"Đã thêm {quantity} × {book.title} vào giỏ hàng!",
+            "success"
+        )
+
+    # 9. Quay lại trang trước
+    next_url = request.form.get(
+        "next",
+        url_for("store_books")
+    )
+
+    # Chỉ cho phép redirect đến đường dẫn nội bộ
+    if not next_url.startswith("/") or next_url.startswith("//"):
+
+        next_url = url_for("store_books")
+
+    return redirect(next_url)
+
+# =========================
+# CART: UPDATE QUANTITY
+# =========================
+
+@app.route(
+    "/cart/<int:book_id>/<action>",
+    methods=["POST"]
+)
+def cart_update(book_id, action):
+
+    # 1. Lấy giỏ hàng
+    cart = session.get("cart", {})
+
+    book_key = str(book_id)
+
+    # 2. Kiểm tra sách có trong giỏ không
+    if book_key not in cart:
+
+        flash(
+            "Sách không tồn tại trong giỏ hàng!",
+            "danger"
+        )
+
+        return redirect(url_for("cart_index"))
+
+    # 3. Kiểm tra hành động
+    if action not in ["increase", "decrease", "remove"]:
+
+        flash("Thao tác không hợp lệ!", "danger")
+
+        return redirect(url_for("cart_index"))
+
+    # 4. Lấy thông tin sách
+    book = db.session.get(Book, book_id)
+
+    if book is None:
+
+        cart.pop(book_key)
+
+        session["cart"] = cart
+
+        flash("Sách không còn tồn tại!", "warning")
+
+        return redirect(url_for("cart_index"))
+
+    # 5. Lấy số lượng hiện tại
+    quantity = int(cart[book_key])
+
+    # 6. Tăng số lượng
+    if action == "increase":
+
+        if quantity < book.stock:
+
+            cart[book_key] = quantity + 1
+
+            flash("Đã tăng số lượng sách!", "success")
+
+        else:
+
+            flash(
+                "Số lượng đã đạt giới hạn tồn kho!",
+                "warning"
+            )
+
+    # 7. Giảm số lượng
+    elif action == "decrease":
+
+        quantity -= 1
+
+        if quantity <= 0:
+
+            cart.pop(book_key)
+
+        else:
+
+            cart[book_key] = quantity
+
+    # 8. Xóa sách khỏi giỏ
+    elif action == "remove":
+
+        cart.pop(book_key)
+
+        flash(
+            f"Đã xóa {book.title} khỏi giỏ hàng!",
+            "success"
+        )
+
+    # 9. Cập nhật Session
+    session["cart"] = cart
+
+    # 10. PRG
+    return redirect(url_for("cart_index"))
+
+# =========================
+# CART: CLEAR
+# =========================
+
+@app.route(
+    "/cart/clear",
+    methods=["POST"]
+)
+def cart_clear():
+
+    # Xóa giỏ hàng khỏi Session
+    session.pop("cart", None)
+
+    flash(
+        "Đã xóa toàn bộ giỏ hàng!",
+        "success"
+    )
+
+    return redirect(url_for("cart_index"))
 ###
 # run
 ###

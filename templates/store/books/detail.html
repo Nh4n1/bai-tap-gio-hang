@@ -1,0 +1,181 @@
+
+{% extends "store/base_store.html" %}
+
+{% block title %}{{ book.title }}{% endblock %}
+
+{% block content %}
+
+<div class="mb-4">
+
+    <a href="{{ url_for('store_books') }}"
+       class="text-secondary text-decoration-none">
+
+        Sách
+
+    </a>
+
+    <span class="text-secondary"> / </span>
+
+    {{ book.title }}
+
+</div>
+
+
+<div class="card border-0 shadow-sm">
+
+    <div class="card-body p-4">
+
+        <div class="row g-4">
+
+            <!-- BOOK IMAGE -->
+            <div class="col-md-5">
+
+                {% if book.image %}
+
+                    <img src="{{ url_for(
+                        'static',
+                        filename='uploads/' ~ book.image
+                    ) }}"
+                         class="img-fluid rounded w-100"
+                         style="max-height: 420px; object-fit: contain;"
+                         alt="{{ book.title }}">
+
+                {% else %}
+
+                    <div class="bg-light rounded d-flex
+                                justify-content-center align-items-center"
+                         style="height: 350px;">
+
+                        Chưa có ảnh bìa
+
+                    </div>
+
+                {% endif %}
+
+            </div>
+
+
+            <!-- BOOK INFORMATION -->
+            <div class="col-md-7">
+
+                <h3 class="fw-bold mb-3">
+                    {{ book.title }}
+                </h3>
+
+                <p class="text-secondary">
+                    Tác giả: {{ book.author }}
+                </p>
+
+                <p>
+                    Nhà xuất bản:
+                    {{ book.publisher or "Chưa cập nhật" }}
+                </p>
+
+                <p>
+                    Năm xuất bản:
+                    {{ book.publish_year or "Chưa cập nhật" }}
+                </p>
+
+                <p>
+                    Danh mục:
+                    {{ book.category.name }}
+                </p>
+
+                <h4 class="fw-bold my-3">
+                    {{ "{:,.0f}".format(book.price) }} đ
+                </h4>
+
+
+                {% if book.stock > 0 %}
+
+                    <p class="text-success">
+                        Còn {{ book.stock }} cuốn
+                    </p>
+
+                {% else %}
+
+                    <p class="text-danger">
+                        Hết hàng
+                    </p>
+
+                {% endif %}
+
+
+                <hr>
+
+
+                <h6 class="fw-bold">
+                    Mô tả sách
+                </h6>
+
+                <p class="text-secondary">
+                    {{ book.description or "Chưa có mô tả." }}
+                </p>
+
+
+                <hr>
+
+
+                <!-- ADD TO CART -->
+                {% if available_quantity > 0 %}
+
+                <form method="POST"
+                      action="{{ url_for(
+                          'cart_add',
+                          book_id=book.id
+                      ) }}">
+
+                    <input type="hidden"
+                           name="csrf_token"
+                           value="{{ csrf_token() }}">
+
+                    <input type="hidden"
+                           name="next"
+                           value="{{ request.path }}">
+
+                    <label class="form-label fw-semibold">
+                        Số lượng
+                    </label>
+
+                    <input type="number"
+                           name="quantity"
+                           class="form-control mb-3"
+                           value="1"
+                           min="1"
+                           max="{{ available_quantity }}"
+                           required>
+
+                    <small class="text-secondary">
+                        Bạn đã có {{ cart_quantity }} cuốn trong giỏ.
+                        Có thể thêm tối đa {{ available_quantity }} cuốn.
+                    </small>
+
+                    <button type="submit"
+                            class="btn btn-dark w-100 mt-3">
+
+                        🛒 Thêm vào giỏ hàng
+
+                    </button>
+
+                </form>
+
+                {% else %}
+
+                    <button class="btn btn-secondary w-100"
+                            disabled>
+
+                        Không thể thêm sách vào giỏ
+
+                    </button>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
