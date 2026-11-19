@@ -1,0 +1,322 @@
+
+{% extends "store/base_store.html" %}
+
+{% block title %}Thông tin đặt hàng{% endblock %}
+
+{% block content %}
+
+<h3 class="fw-bold mb-4">
+    Thông tin đặt hàng
+</h3>
+
+<form method="POST"
+      action="{{ url_for('place_order') }}">
+    {{ form.hidden_tag() }}
+
+    <div class="row g-4">
+
+        <!-- CUSTOMER INFORMATION -->
+        <div class="col-lg-7">
+
+            <div class="card border-0 shadow-sm">
+
+                <div class="card-body p-4">
+
+                    <h5 class="fw-bold mb-4">
+                        Thông tin khách hàng
+                    </h5>
+
+                    <!-- NAME -->
+                    <div class="mb-3">
+
+                        {{ form.customer_name.label(
+                            class="form-label fw-semibold"
+                        ) }}
+
+                        {{ form.customer_name(
+                            class="form-control",
+                            placeholder="Nguyễn Văn An"
+                        ) }}
+
+                        {% for error in form.customer_name.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- PHONE AND EMAIL -->
+                    <div class="row">
+
+                        <div class="col-md-6 mb-3">
+
+                            {{ form.phone.label(
+                                class="form-label fw-semibold"
+                            ) }}
+
+                            {{ form.phone(
+                                class="form-control",
+                                placeholder="0912345678"
+                            ) }}
+
+                            {% for error in form.phone.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-md-6 mb-3">
+
+                            {{ form.email.label(
+                                class="form-label fw-semibold"
+                            ) }}
+
+                            {{ form.email(
+                                class="form-control",
+                                placeholder="example@gmail.com"
+                            ) }}
+
+                            {% for error in form.email.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- ADDRESS -->
+                    <div class="mb-3">
+
+                        {{ form.address.label(
+                            class="form-label fw-semibold"
+                        ) }}
+
+                        {{ form.address(
+                            class="form-control",
+                            placeholder="Số nhà, đường, phường/xã, tỉnh/thành phố"
+                        ) }}
+
+                        {% for error in form.address.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <!-- NOTE -->
+                    <div class="mb-4">
+
+                        {{ form.note.label(
+                            class="form-label fw-semibold"
+                        ) }}
+
+                        {{ form.note(
+                            class="form-control",
+                            rows="3",
+                            placeholder="Ghi chú cho đơn hàng (nếu có)"
+                        ) }}
+
+                        {% for error in form.note.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <hr>
+
+                    <!-- PAYMENT METHOD -->
+                    <h6 class="fw-bold mb-3">
+                        Phương thức thanh toán
+                    </h6>
+
+                    {% for value, label in form.payment_method.choices %}
+
+                    <div class="form-check mb-2">
+
+                        <input
+                            class="form-check-input"
+                            type="radio"
+                            name="{{ form.payment_method.name }}"
+                            id="payment_{{ value }}"
+                            value="{{ value }}"
+                            {% if form.payment_method.data == value %}
+                                checked
+                            {% elif not form.payment_method.data and loop.first %}
+                                checked
+                            {% endif %}
+                        >
+
+                        <label
+                            class="form-check-label"
+                            for="payment_{{ value }}"
+                        >
+                            {{ label }}
+                        </label>
+
+                    </div>
+
+                    {% endfor %}
+
+                    {% for error in form.payment_method.errors %}
+                        <div class="text-danger small mt-1">
+                            {{ error }}
+                        </div>
+                    {% endfor %}
+
+
+                    <hr>
+
+                    <!-- SUBMIT -->
+                    {{ form.submit(
+                        class="btn btn-dark w-100 py-2",
+                        value="Xác nhận đặt hàng"
+                    ) }}
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- ORDER SUMMARY -->
+        <div class="col-lg-5">
+
+            <div class="card border-0 shadow-sm">
+
+                <div class="card-body p-4">
+
+                    <h5 class="fw-bold mb-4">
+                        Đơn hàng của bạn
+                    </h5>
+
+
+                    <!-- PRODUCTS -->
+                    {% for item in cart_items %}
+
+                    <div class="d-flex justify-content-between
+                                align-items-start gap-3 mb-3">
+
+                        <div>
+
+                            <div class="fw-semibold">
+                                {{ item.book.title }}
+                            </div>
+
+                            <div class="text-secondary small">
+                                Số lượng: {{ item.quantity }}
+                            </div>
+
+                        </div>
+
+                        <div class="text-nowrap fw-semibold">
+
+                            {{ "{:,.0f}".format(item.line_total) }} đ
+
+                        </div>
+
+                    </div>
+
+                    {% endfor %}
+
+
+                    <hr>
+
+
+                    <!-- SUBTOTAL -->
+                    <div class="d-flex justify-content-between mb-3">
+
+                        <span class="text-secondary">
+                            Tạm tính
+                        </span>
+
+                        <span class="fw-semibold">
+                            {{ "{:,.0f}".format(subtotal) }} đ
+                        </span>
+
+                    </div>
+
+
+                    <!-- SHIPPING -->
+                    <div class="d-flex justify-content-between mb-2">
+
+                        <span class="text-secondary">
+                            Phí giao hàng
+                        </span>
+
+                        <span class="fw-semibold">
+
+                            {% if shipping_fee == 0 %}
+
+                                <span class="text-success">
+                                    Miễn phí
+                                </span>
+
+                            {% else %}
+
+                                {{ "{:,.0f}".format(shipping_fee) }} đ
+
+                            {% endif %}
+
+                        </span>
+
+                    </div>
+
+
+                    <div class="small text-secondary mb-3">
+                        Miễn phí giao hàng khi tạm tính từ
+                        200.000đ.
+                    </div>
+
+
+                    <hr>
+
+
+                    <!-- TOTAL -->
+                    <div class="d-flex justify-content-between
+                                align-items-center">
+
+                        <span class="fw-bold">
+                            Tổng thanh toán
+                        </span>
+
+                        <h4 class="fw-bold mb-0">
+
+                            {{ "{:,.0f}".format(total) }} đ
+
+                        </h4>
+
+                    </div>
+
+
+                    <a href="{{ url_for('cart_index') }}"
+                       class="btn btn-outline-dark w-100 mt-4">
+
+                        ← Quay lại giỏ hàng
+
+                    </a>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</form>
+
+{% endblock %}

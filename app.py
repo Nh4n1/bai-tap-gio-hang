@@ -3,7 +3,16 @@ import os
 import uuid
 from datetime import datetime
 
-from flask import Flask, current_app, flash, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from PIL import Image
@@ -12,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
 from config import Config
-from forms import BookForm, CategoryForm, OrderStatusForm
+from forms import BookForm, CategoryForm, CheckoutForm, OrderStatusForm
 
 # config
 
@@ -51,6 +60,12 @@ ORDER_STATUS_TRANSITIONS = {
 
     ORDER_STATUS_CANCELLED: []
 }
+
+# Shipping configuration
+
+SHIPPING_FEE = 20000
+
+FREE_SHIPPING_THRESHOLD = 200000
 
 def save_book_image(image_file):
 
@@ -97,6 +112,58 @@ def save_book_image(image_file):
     return filename
 
 
+def get_cart_data():
+
+    # 1. Lấy giỏ hàng từ Session
+    cart = session.get("cart", {})
+
+    # 2. Nếu giỏ hàng trống
+    if not cart:
+        return [], 0
+
+    # 3. Chuyển ID sách thành số nguyên
+    book_ids = [
+        int(book_id)
+        for book_id in cart.keys()
+    ]
+
+    # 4. Truy vấn các sách trong giỏ hàng
+    books = db.session.scalars(
+        db.select(Book).where(
+            Book.id.in_(book_ids)
+        )
+    ).all()
+
+    # 5. Tạo danh sách sản phẩm
+    cart_items = []
+
+    # 6. Tính tổng tiền
+    subtotal = 0
+
+    for book in books:
+
+        quantity = int(
+            cart.get(str(book.id), 0)
+        )
+
+        line_total = book.price * quantity
+
+        subtotal += line_total
+
+        cart_items.append({
+            "book": book,
+            "quantity": quantity,
+            "line_total": line_total
+        })
+
+    return cart_items, subtotal
+def calculate_shipping_fee(subtotal):
+
+    if subtotal >= FREE_SHIPPING_THRESHOLD:
+
+        return 0
+
+    return SHIPPING_FEE
 # model
 
 class Category(db.Model):
@@ -1371,6 +1438,324 @@ def cart_clear():
     )
 
     return redirect(url_for("cart_index"))
+
+
+# =========================
+# CHECKOUT
+# =========================
+
+@app.route(
+    "/checkout",
+    methods=["GET", "POST"]
+)
+def checkout():
+
+    # 1. Kiểm tra giỏ hàng
+    cart_items, subtotal = get_cart_data()
+
+    if not cart_items:
+
+        flash(
+            "Giỏ hàng đang trống, vui lòng chọn sách trước!",
+            "warning"
+        )
+
+        return redirect(url_for("cart_index"))
+
+    # 2. Khởi tạo form
+    form = CheckoutForm()
+
+    # 3. Tính phí giao hàng
+    shipping_fee = calculate_shipping_fee(
+        subtotal
+    )
+
+    # 4. Tính tổng thanh toán
+    total = subtotal + shipping_fee
+
+    # 5. Nếu form hợp lệ
+    if form.validate_on_submit():
+
+        # Chưa tạo đơn ở giai đoạn này.
+        # Việc tạo đơn sẽ được thực hiện ở giai đoạn 8.
+
+        return redirect(
+            url_for("place_order")
+        )
+
+    # 6. Hiển thị giao diện checkout
+    return render_template(
+        "store/checkout.html",
+
+        form=form,
+
+        cart_items=cart_items,
+
+        subtotal=subtotal,
+
+        shipping_fee=shipping_fee,
+
+        total=total
+    )
+
+# =========================
+# PLACE ORDER
+# =========================
+
+@app.route(
+    "/checkout/place-order",
+    methods=["POST"]
+)
+def place_order():
+
+    # 1. Kiểm tra form
+    form = CheckoutForm()
+
+    if not form.validate_on_submit():
+
+        cart_items, subtotal = get_cart_data()
+
+        if not cart_items:
+            return redirect(url_for("cart_index"))
+
+        shipping_fee = calculate_shipping_fee(subtotal)
+
+        total = subtotal + shipping_fee
+
+        return render_template(
+            "store/checkout.html",
+
+            form=form,
+
+            cart_items=cart_items,
+
+            subtotal=subtotal,
+
+            shipping_fee=shipping_fee,
+
+            total=total
+        )
+
+    # 2. Lấy giỏ hàng
+    cart = session.get("cart", {})
+
+    if not cart:
+
+        flash(
+            "Giỏ hàng đang trống!",
+            "warning"
+        )
+
+        return redirect(
+            url_for("cart_index")
+        )
+
+    try:
+
+        # 3. Lấy dữ liệu sách mới nhất từ database
+        cart_items, subtotal = get_cart_data()
+
+        if not cart_items:
+
+            flash(
+                "Không tìm thấy sản phẩm trong giỏ hàng!",
+                "warning"
+            )
+
+            return redirect(
+                url_for("cart_index")
+            )
+
+        # 4. Kiểm tra lại tồn kho
+        insufficient_books = []
+
+        for item in cart_items:
+
+            book = item["book"]
+
+            quantity = item["quantity"]
+
+            if book.stock < quantity:
+
+                insufficient_books.append(
+                    f"{book.title} "
+                    f"(còn {book.stock}, "
+                    f"yêu cầu {quantity})"
+                )
+
+        # Nếu có sách không đủ hàng
+        if insufficient_books:
+
+            flash(
+                "Không đủ tồn kho: "
+                + "; ".join(insufficient_books),
+                "danger"
+            )
+
+            return redirect(
+                url_for("cart_index")
+            )
+
+        # 5. Tính phí giao hàng
+        shipping_fee = calculate_shipping_fee(
+            subtotal
+        )
+
+        # 6. Tính tổng thanh toán
+        total = subtotal + shipping_fee
+
+        # 7. Tạo Order
+        order = Order(
+
+            customer_name=form.customer_name.data.strip(),
+
+            phone=form.phone.data.strip(),
+
+            email=form.email.data.strip() or None,
+
+            address=form.address.data.strip(),
+
+            note=form.note.data.strip() or None,
+
+            payment_method=form.payment_method.data,
+
+            status=ORDER_STATUS_PENDING,
+
+            subtotal=subtotal,
+
+            shipping_fee=shipping_fee,
+
+            total=total,
+
+            created_at=datetime.now()
+        )
+
+        # 8. Thêm Order vào session
+        db.session.add(order)
+
+        # 9. Flush để lấy order.id
+        db.session.flush()
+
+        # 10. Tạo OrderItem và trừ tồn kho
+        for item in cart_items:
+
+            book = item["book"]
+
+            quantity = item["quantity"]
+
+            # Tạo chi tiết đơn hàng
+            order_item = OrderItem(
+
+                order_id=order.id,
+
+                book_id=book.id,
+
+                quantity=quantity,
+
+                unit_price=book.price
+            )
+
+            db.session.add(order_item)
+
+            # Trừ tồn kho
+            book.stock -= quantity
+
+        # 11. Tạo lịch sử trạng thái ban đầu
+        initial_history = OrderStatusHistory(
+
+            order_id=order.id,
+
+            status=ORDER_STATUS_PENDING,
+
+            created_at=datetime.now()
+        )
+
+        db.session.add(initial_history)
+
+        # 12. Commit tất cả thay đổi
+        db.session.commit()
+
+        # 13. Lưu ID đơn hàng
+        order_id = order.id
+
+        # 14. Xóa giỏ hàng
+        session.pop("cart", None)
+
+        # 15. Thông báo thành công
+        flash(
+            "Đặt hàng thành công!",
+            "success"
+        )
+
+        # 16. Chuyển đến trang xác nhận
+        return redirect(
+            url_for(
+                "order_success",
+                order_id=order_id
+            )
+        )
+
+    except Exception as e:
+
+        # Nếu xảy ra lỗi thì hoàn tác
+        db.session.rollback()
+
+        current_app.logger.exception(
+            "Lỗi khi xử lý đặt hàng"
+        )
+
+        flash(
+            "Có lỗi xảy ra khi đặt hàng. "
+            "Vui lòng thử lại!",
+            "danger"
+        )
+
+        return redirect(
+            url_for("checkout")
+        )
+
+# =========================
+# ORDER SUCCESS
+# =========================
+
+@app.route("/orders/<int:order_id>")
+def order_success(order_id):
+
+    # 1. Tìm đơn hàng
+    order = db.get_or_404(
+        Order,
+        order_id
+    )
+
+    # 2. Lấy các sản phẩm trong đơn hàng
+    order_items = db.session.scalars(
+        db.select(OrderItem)
+        .where(OrderItem.order_id == order.id)
+    ).all()
+
+    # 3. Lấy lịch sử trạng thái
+    histories = db.session.scalars(
+        db.select(OrderStatusHistory)
+        .where(
+            OrderStatusHistory.order_id == order.id
+        )
+        .order_by(
+            OrderStatusHistory.created_at.asc()
+        )
+    ).all()
+
+    return render_template(
+        "store/orders/success.html",
+
+        order=order,
+
+        order_items=order_items,
+
+        histories=histories,
+
+        status_labels=ORDER_STATUS_LABELS
+    )
+
 ###
 # run
 ###

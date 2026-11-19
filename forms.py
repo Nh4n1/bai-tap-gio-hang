@@ -10,7 +10,14 @@ from wtforms import (
     SubmitField,
     TextAreaField,
 )
-from wtforms.validators import DataRequired, Length, NumberRange, Optional
+from wtforms.validators import (
+    DataRequired,
+    Email,
+    Length,
+    NumberRange,
+    Optional,
+    Regexp,
+)
 
 
 class CategoryForm(FlaskForm):
@@ -128,3 +135,91 @@ class OrderStatusForm(FlaskForm):
     )
 
     submit = SubmitField("Cập nhật trạng thái")
+    
+    
+
+class CheckoutForm(FlaskForm):
+
+    # Họ tên khách hàng
+    customer_name = StringField(
+        "Họ tên",
+        validators=[
+            DataRequired(
+                message="Vui lòng nhập họ tên!"
+            ),
+            Length(
+                max=150,
+                message="Họ tên không được vượt quá 150 ký tự!"
+            )
+        ]
+    )
+
+    # Số điện thoại
+    phone = StringField(
+        "Số điện thoại",
+        validators=[
+            DataRequired(
+                message="Vui lòng nhập số điện thoại!"
+            ),
+            Regexp(
+                r"^0\d{9}$",
+                message="Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0!"
+            )
+        ]
+    )
+
+    # Email không bắt buộc
+    email = StringField(
+        "Email",
+        validators=[
+            Optional(),
+            Email(
+                message="Email không đúng định dạng!"
+            ),
+            Length(
+                max=150,
+                message="Email không được vượt quá 150 ký tự!"
+            )
+        ]
+    )
+
+    # Địa chỉ giao hàng
+    address = StringField(
+        "Địa chỉ giao hàng",
+        validators=[
+            DataRequired(
+                message="Vui lòng nhập địa chỉ giao hàng!"
+            ),
+            Length(
+                max=255,
+                message="Địa chỉ không được vượt quá 255 ký tự!"
+            )
+        ]
+    )
+
+    # Ghi chú
+    note = TextAreaField(
+        "Ghi chú",
+        validators=[
+            Optional()
+        ]
+    )
+
+    # Phương thức thanh toán
+    payment_method = SelectField(
+        "Phương thức thanh toán",
+        choices=[
+            ("cash", "Tiền mặt khi nhận hàng"),
+            ("bank_transfer", "Chuyển khoản")
+        ],
+        validators=[
+            DataRequired(
+                message="Vui lòng chọn phương thức thanh toán!"
+            )
+        ]
+    )
+
+    # Nút xác nhận
+    submit = SubmitField(
+        "Xác nhận đặt hàng"
+    )
