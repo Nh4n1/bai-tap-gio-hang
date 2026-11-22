@@ -9,14 +9,19 @@
 
     <a href="{{ url_for('store_books') }}"
        class="text-secondary text-decoration-none">
-
         Sách
-
     </a>
 
-    <span class="text-secondary"> / </span>
+    <span class="text-secondary"> › </span>
 
-    {{ book.title }}
+    <a href="{{ url_for('store_books', category_id=book.category.id) }}"
+       class="text-secondary text-decoration-none">
+        {{ book.category.name }}
+    </a>
+
+    <span class="text-secondary"> › </span>
+
+    <span class="text-dark">{{ book.title }}</span>
 
 </div>
 

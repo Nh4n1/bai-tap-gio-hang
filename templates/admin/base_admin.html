@@ -31,7 +31,7 @@
         <div class="row">
 
             <!-- SIDEBAR -->
-            <aside class="col-md-2 bg-white border-end sidebar p-3">
+            <aside class="col-md-2 bg-white border-end sidebar p-3 d-flex flex-column">
 
                 <h6 class="text-secondary mb-3 mt-2">QUẢN LÝ</h6>
 
@@ -57,13 +57,20 @@
                         🧾 Đơn hàng
 
                         {% if pending_orders_count %}
-                        <span class="badge text-bg-dark ms-1">
+                        <span class="badge text-bg-warning ms-1">
                             {{ pending_orders_count }}
                         </span>
                         {% endif %}
 
                     </a>
 
+                </div>
+
+                <div class="mt-auto pt-4 border-top">
+                    <a href="{{ url_for('store_books') }}"
+                       class="nav-link text-secondary">
+                        ← Trang bán hàng
+                    </a>
                 </div>
 
             </aside>

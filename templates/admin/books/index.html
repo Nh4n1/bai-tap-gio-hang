@@ -190,17 +190,25 @@
                             Sửa
                         </a>
 
+                        {% set in_order = book.id in ordered_book_ids %}
+
                         <form action="{{ url_for('delete_book', book_id=book.id) }}"
                               method="POST"
                               class="d-inline"
-                              onsubmit="return confirm('Bạn có chắc muốn xóa sách này?')">
+                              {% if not in_order %}
+                              onsubmit="return confirm('Bạn có chắc muốn xóa sách này?')"
+                              {% endif %}>
 
                             <input type="hidden"
                                    name="csrf_token"
                                    value="{{ csrf_token() }}">
 
                             <button type="submit"
-                                    class="btn btn-sm btn-outline-danger">
+                                    class="btn btn-sm btn-outline-danger"
+                                    {% if in_order %}
+                                    disabled
+                                    title="Không thể xóa: sách đã xuất hiện trong đơn hàng"
+                                    {% endif %}>
                                 Xóa
                             </button>
 

@@ -338,7 +338,7 @@ def admin_categories():
         ).first()
 
         if existing:
-            flash("Danh mục đã tồn tại!", "danger")
+            form.name.errors = list(form.name.errors) + ["Danh mục đã tồn tại."]
 
         else:
             category = Category(
@@ -378,7 +378,7 @@ def edit_category(category_id):
         ).first()
 
         if existing:
-            flash("Tên danh mục đã tồn tại!", "danger")
+            form.name.errors = list(form.name.errors) + ["Tên danh mục đã tồn tại."]
 
         else:
             category.name = name
@@ -491,6 +491,13 @@ def admin_books():
         Category.name
     ).all()
 
+    # 6. Lấy tập hợp book_id đã xuất hiện trong đơn hàng
+    ordered_book_ids = set(
+        row[0] for row in db.session.execute(
+            db.select(OrderItem.book_id).distinct()
+        ).all()
+    )
+
     return render_template(
         "admin/books/index.html",
         pagination=pagination,
@@ -498,7 +505,8 @@ def admin_books():
         categories=categories,
         keyword=keyword,
         category_id=category_id,
-        stock_filter=stock_filter
+        stock_filter=stock_filter,
+        ordered_book_ids=ordered_book_ids
     )
 
 @app.route("/admin/books/new", methods=["GET", "POST"])
@@ -739,7 +747,7 @@ def delete_book(book_id):
 
 @app.route("/")
 def index():
-    return redirect(url_for("admin_dashboard"))
+    return redirect(url_for("store_books"))
 
 
 @app.route("/admin")
@@ -1441,7 +1449,7 @@ def cart_clear():
 
 
 # =========================
-# CHECKOUT
+# CHECKOUT & PLACE ORDER
 # =========================
 
 @app.route(
@@ -1473,15 +1481,127 @@ def checkout():
     # 4. Tính tổng thanh toán
     total = subtotal + shipping_fee
 
-    # 5. Nếu form hợp lệ
+    # 5. Xử lý khi khách hàng xác nhận đặt hàng
     if form.validate_on_submit():
 
-        # Chưa tạo đơn ở giai đoạn này.
-        # Việc tạo đơn sẽ được thực hiện ở giai đoạn 8.
+        cart = session.get("cart", {})
 
-        return redirect(
-            url_for("place_order")
-        )
+        if not cart:
+
+            flash(
+                "Giỏ hàng đang trống!",
+                "warning"
+            )
+
+            return redirect(url_for("cart_index"))
+
+        try:
+
+            # Lấy dữ liệu sách mới nhất từ database
+            cart_items, subtotal = get_cart_data()
+
+            if not cart_items:
+
+                flash(
+                    "Không tìm thấy sản phẩm trong giỏ hàng!",
+                    "warning"
+                )
+
+                return redirect(url_for("cart_index"))
+
+            # Kiểm tra lại tồn kho
+            insufficient_books = []
+
+            for item in cart_items:
+
+                book = item["book"]
+                quantity = item["quantity"]
+
+                if book.stock < quantity:
+
+                    insufficient_books.append(
+                        f"{book.title} (còn {book.stock}, yêu cầu {quantity})"
+                    )
+
+            # Nếu có sách không đủ hàng: không tạo đơn, quay về giỏ, báo rõ sách nào
+            if insufficient_books:
+
+                flash(
+                    "Không đủ tồn kho: " + "; ".join(insufficient_books),
+                    "danger"
+                )
+
+                return redirect(url_for("cart_index"))
+
+            # Tính phí giao hàng và tổng thanh toán
+            shipping_fee = calculate_shipping_fee(subtotal)
+            total = subtotal + shipping_fee
+
+            # Tạo Order
+            order = Order(
+                customer_name=form.customer_name.data.strip(),
+                phone=form.phone.data.strip(),
+                email=form.email.data.strip() or None,
+                address=form.address.data.strip(),
+                note=form.note.data.strip() or None,
+                payment_method=form.payment_method.data,
+                status=ORDER_STATUS_PENDING,
+                subtotal=subtotal,
+                shipping_fee=shipping_fee,
+                total=total,
+                created_at=datetime.now()
+            )
+
+            db.session.add(order)
+            db.session.flush()
+
+            # Tạo OrderItem và trừ tồn kho
+            for item in cart_items:
+
+                book = item["book"]
+                quantity = item["quantity"]
+
+                order_item = OrderItem(
+                    order_id=order.id,
+                    book_id=book.id,
+                    quantity=quantity,
+                    unit_price=book.price
+                )
+
+                db.session.add(order_item)
+                book.stock -= quantity
+
+            # Ghi lại lịch sử trạng thái ban đầu
+            initial_history = OrderStatusHistory(
+                order_id=order.id,
+                status=ORDER_STATUS_PENDING,
+                created_at=datetime.now()
+            )
+
+            db.session.add(initial_history)
+            db.session.commit()
+
+            order_id = order.id
+
+            # Xóa giỏ hàng
+            session.pop("cart", None)
+
+            flash("Đặt hàng thành công!", "success")
+
+            return redirect(
+                url_for("order_success", order_id=order_id)
+            )
+
+        except Exception:
+
+            db.session.rollback()
+
+            current_app.logger.exception("Lỗi khi xử lý đặt hàng")
+
+            flash(
+                "Có lỗi xảy ra khi đặt hàng. Vui lòng thử lại!",
+                "danger"
+            )
 
     # 6. Hiển thị giao diện checkout
     return render_template(
@@ -1498,221 +1618,13 @@ def checkout():
         total=total
     )
 
-# =========================
-# PLACE ORDER
-# =========================
 
 @app.route(
     "/checkout/place-order",
     methods=["POST"]
 )
 def place_order():
-
-    # 1. Kiểm tra form
-    form = CheckoutForm()
-
-    if not form.validate_on_submit():
-
-        cart_items, subtotal = get_cart_data()
-
-        if not cart_items:
-            return redirect(url_for("cart_index"))
-
-        shipping_fee = calculate_shipping_fee(subtotal)
-
-        total = subtotal + shipping_fee
-
-        return render_template(
-            "store/checkout.html",
-
-            form=form,
-
-            cart_items=cart_items,
-
-            subtotal=subtotal,
-
-            shipping_fee=shipping_fee,
-
-            total=total
-        )
-
-    # 2. Lấy giỏ hàng
-    cart = session.get("cart", {})
-
-    if not cart:
-
-        flash(
-            "Giỏ hàng đang trống!",
-            "warning"
-        )
-
-        return redirect(
-            url_for("cart_index")
-        )
-
-    try:
-
-        # 3. Lấy dữ liệu sách mới nhất từ database
-        cart_items, subtotal = get_cart_data()
-
-        if not cart_items:
-
-            flash(
-                "Không tìm thấy sản phẩm trong giỏ hàng!",
-                "warning"
-            )
-
-            return redirect(
-                url_for("cart_index")
-            )
-
-        # 4. Kiểm tra lại tồn kho
-        insufficient_books = []
-
-        for item in cart_items:
-
-            book = item["book"]
-
-            quantity = item["quantity"]
-
-            if book.stock < quantity:
-
-                insufficient_books.append(
-                    f"{book.title} "
-                    f"(còn {book.stock}, "
-                    f"yêu cầu {quantity})"
-                )
-
-        # Nếu có sách không đủ hàng
-        if insufficient_books:
-
-            flash(
-                "Không đủ tồn kho: "
-                + "; ".join(insufficient_books),
-                "danger"
-            )
-
-            return redirect(
-                url_for("cart_index")
-            )
-
-        # 5. Tính phí giao hàng
-        shipping_fee = calculate_shipping_fee(
-            subtotal
-        )
-
-        # 6. Tính tổng thanh toán
-        total = subtotal + shipping_fee
-
-        # 7. Tạo Order
-        order = Order(
-
-            customer_name=form.customer_name.data.strip(),
-
-            phone=form.phone.data.strip(),
-
-            email=form.email.data.strip() or None,
-
-            address=form.address.data.strip(),
-
-            note=form.note.data.strip() or None,
-
-            payment_method=form.payment_method.data,
-
-            status=ORDER_STATUS_PENDING,
-
-            subtotal=subtotal,
-
-            shipping_fee=shipping_fee,
-
-            total=total,
-
-            created_at=datetime.now()
-        )
-
-        # 8. Thêm Order vào session
-        db.session.add(order)
-
-        # 9. Flush để lấy order.id
-        db.session.flush()
-
-        # 10. Tạo OrderItem và trừ tồn kho
-        for item in cart_items:
-
-            book = item["book"]
-
-            quantity = item["quantity"]
-
-            # Tạo chi tiết đơn hàng
-            order_item = OrderItem(
-
-                order_id=order.id,
-
-                book_id=book.id,
-
-                quantity=quantity,
-
-                unit_price=book.price
-            )
-
-            db.session.add(order_item)
-
-            # Trừ tồn kho
-            book.stock -= quantity
-
-        # 11. Tạo lịch sử trạng thái ban đầu
-        initial_history = OrderStatusHistory(
-
-            order_id=order.id,
-
-            status=ORDER_STATUS_PENDING,
-
-            created_at=datetime.now()
-        )
-
-        db.session.add(initial_history)
-
-        # 12. Commit tất cả thay đổi
-        db.session.commit()
-
-        # 13. Lưu ID đơn hàng
-        order_id = order.id
-
-        # 14. Xóa giỏ hàng
-        session.pop("cart", None)
-
-        # 15. Thông báo thành công
-        flash(
-            "Đặt hàng thành công!",
-            "success"
-        )
-
-        # 16. Chuyển đến trang xác nhận
-        return redirect(
-            url_for(
-                "order_success",
-                order_id=order_id
-            )
-        )
-
-    except Exception as e:
-
-        # Nếu xảy ra lỗi thì hoàn tác
-        db.session.rollback()
-
-        current_app.logger.exception(
-            "Lỗi khi xử lý đặt hàng"
-        )
-
-        flash(
-            "Có lỗi xảy ra khi đặt hàng. "
-            "Vui lòng thử lại!",
-            "danger"
-        )
-
-        return redirect(
-            url_for("checkout")
-        )
+    return checkout()
 
 # =========================
 # ORDER SUCCESS

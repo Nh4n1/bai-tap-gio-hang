@@ -78,7 +78,13 @@
                         Phương thức thanh toán
                     </div>
 
-                    {{ order.payment_method }}
+                    {% if order.payment_method == "cash" %}
+                        Tiền mặt khi nhận hàng
+                    {% elif order.payment_method == "bank_transfer" %}
+                        Chuyển khoản
+                    {% else %}
+                        {{ order.payment_method }}
+                    {% endif %}
 
                 </div>
 
@@ -207,12 +213,6 @@
                     </h5>
 
                 </div>
-
-                <small class="text-secondary">
-                    Đơn giá sản phẩm được lấy từ
-                    OrderItem.unit_price tại thời điểm đặt hàng.
-                </small>
-
             </div>
 
         </div>
